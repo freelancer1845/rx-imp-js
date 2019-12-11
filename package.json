@@ -42,7 +42,7 @@
     "testRegex": "^.+\\.spec\\.ts$"
   },
   "dependencies": {
-    "rxjs": "^6.5.3",
-    "uuid": "^3.3.3"
+    "rxjs": "^6.4.0",
+    "uuid": "^3.3.0"
   }
 }
