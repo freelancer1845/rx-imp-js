@@ -5,6 +5,7 @@
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "scripts": {
+    "prepare": "npm run build",
     "build": "./node_modules/.bin/tsc",
     "test": "jest"
   },
