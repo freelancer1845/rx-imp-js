@@ -127,14 +127,14 @@ export class RxImp {
     }
 
     private mapIncoming(data: rxData): RxImpMessage {
-        return JSON.parse(String.fromCharCode.apply(null, Array.from(new Uint16Array(data))));
+        return JSON.parse(String.fromCharCode.apply(null, Array.from(new Uint8Array(data))));
     }
 
 
     public static toArrayBuffer(str: string): ArrayBuffer {
         const stringLength = str.length;
-        const buffer = new ArrayBuffer(stringLength * 2);
-        const bufferView = new Uint16Array(buffer);
+        const buffer = new ArrayBuffer(stringLength);
+        const bufferView = new Uint8Array(buffer);
         for (let i = 0; i < stringLength; i++) {
             bufferView[i] = str.charCodeAt(i);
         }
