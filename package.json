@@ -1,5 +1,5 @@
 {
-  "name": "rx-imp-js",
+  "name": "@freelancer1845/rx-imp-js",
   "version": "0.0.1",
   "description": "",
   "main": "lib/index.js",
@@ -12,7 +12,11 @@
     "type": "git",
     "url": "git+https://github.com/freelancer1845/rx-imp-js.git"
   },
-  "keywords": ["ReactiveX", "Rx", "Connect"],
+  "keywords": [
+    "ReactiveX",
+    "Rx",
+    "Connect"
+  ],
   "author": "Jascha Riedel",
   "license": "MIT",
   "bugs": {
