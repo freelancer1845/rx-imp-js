@@ -1,0 +1,43 @@
+{
+  "name": "rx-imp-js",
+  "version": "0.0.1",
+  "description": "",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "scripts": {
+    "build": "./node_modules/.bin/tsc",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freelancer1845/rx-imp-js.git"
+  },
+  "keywords": ["ReactiveX", "Rx", "Connect"],
+  "author": "Jascha Riedel",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/freelancer1845/rx-imp-js/issues"
+  },
+  "homepage": "https://github.com/freelancer1845/rx-imp-js#readme",
+  "devDependencies": {
+    "@types/jest": "^24.0.23",
+    "jest": "^24.9.0",
+    "ts-jest": "^24.2.0",
+    "typescript": "^3.7.3"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "moduleFileExtensions": [
+      "ts",
+      "js"
+    ],
+    "testRegex": "^.+\\.spec\\.ts$"
+  },
+  "dependencies": {
+    "@types/uuid": "^3.4.6",
+    "rxjs": "^6.5.3",
+    "uuid": "^3.3.3"
+  }
+}
