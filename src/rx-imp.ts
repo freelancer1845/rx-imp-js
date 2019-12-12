@@ -1,6 +1,6 @@
 import { Observable, Subject, ConnectableObservable, defer, Subscription } from 'rxjs';
-import { rxData, RxImpMessage, STATE_NEXT, STATE_SUBSCRIBE, STATE_ERROR, STATE_COMPLETE } from './rx-imp.model';
-import { map, publish, filter, takeWhile, publishReplay, tap, shareReplay, share } from 'rxjs/operators';
+import { rxData, RxImpMessage, STATE_NEXT, STATE_SUBSCRIBE, STATE_ERROR, STATE_COMPLETE, STATE_DISPOSE } from './rx-imp.model';
+import { map, publish, filter, takeWhile, publishReplay, tap, shareReplay, share, takeUntil, take } from 'rxjs/operators';
 import * as uuid from 'uuid';
 
 
@@ -48,9 +48,30 @@ export class RxImp {
             count: 0,
             payload: JSON.stringify(payload),
         };
-        return defer(() => {
-            const obs: ConnectableObservable<T> = <ConnectableObservable<T>>this._in.pipe(
+
+        // return defer(() => {
+        //     const obs = this._in.pipe(
+        //         filter(recvMsg => recvMsg.id === msg.id),
+        //         map(this._checkError),
+        //         takeWhile(this._checkNotComplete),
+        //         map(recvMsg => {
+        //             if (recvMsg.payload) {
+        //                 return <T>JSON.parse(recvMsg.payload as string)
+        //             }
+        //             else {
+        //                 return {} as T;
+        //             }
+        //         }),
+        //         share(),
+        //     );
+        //     this._out.next(msg);
+        //     return obs;
+        // });
+
+        return new Observable<T>(observer => {
+            const subscription = this._in.pipe(
                 filter(recvMsg => recvMsg.id === msg.id),
+                filter(recvMsg => recvMsg.rx_state !== STATE_SUBSCRIBE),
                 map(this._checkError),
                 takeWhile(this._checkNotComplete),
                 map(recvMsg => {
@@ -61,51 +82,123 @@ export class RxImp {
                         return {} as T;
                     }
                 }),
-                publishReplay(),
-            );
-            obs.connect();
+                share(),
+            ).subscribe(observer);
             this._out.next(msg);
-            return obs;
+
+            return () => {
+                subscription.unsubscribe();
+                const unsubscribeMsg: RxImpMessage = {
+                    id: msg.id,
+                    topic: msg.topic,
+                    count: 0,
+                    rx_state: STATE_DISPOSE
+                }
+                this._out.next(unsubscribeMsg);
+            }
         });
     }
 
-    public registerCall<T>(topic: string, handler: (parameter: T | undefined, publisher: Subject<T>) => void): Subscription {
+    public registerCall<T>(topic: string, handler: (arg: T) => Observable<T>): Subscription {
+        return this._in.pipe(
+            filter(msg => msg.rx_state === STATE_SUBSCRIBE),
+            filter(msg => msg.topic === topic)
+        ).subscribe(msg => {
+            let obs;
+            if (msg.payload) {
+                obs = handler(JSON.parse(msg.payload));
+            } else {
+                obs = handler(JSON.parse("{}"));
+            }
+            obs.pipe(
+                takeUntil(this._in.pipe(
+                    filter(msg => msg.rx_state === STATE_DISPOSE),
+                    filter(disposeMsg => disposeMsg.id === msg.id),
+                    tap(n => console.log("Dispose Message Received. Current Value: " + n.payload)),
+                    take(1))
+                )
+            ).subscribe(
+                {
+                    next: nxt => {
+                        const nxtMsg: RxImpMessage = {
+                            id: msg.id,
+                            topic: msg.topic,
+                            count: 0,
+                            rx_state: STATE_NEXT,
+                            payload: JSON.stringify(nxt),
+                        }
+                        this._out.next(nxtMsg);
+                    },
+                    error: err => {
+                        const errMsg: RxImpMessage = {
+                            id: msg.id,
+                            topic: msg.topic,
+                            count: 0,
+                            rx_state: STATE_ERROR,
+                            payload: JSON.stringify(err.message),
+                        }
+                        this._out.next(errMsg);
+                    },
+                    complete: () => {
+                        const cmplMsg: RxImpMessage = {
+                            id: msg.id,
+                            topic: msg.topic,
+                            count: 0,
+                            rx_state: STATE_COMPLETE
+                        }
+                        this._out.next(cmplMsg);
+                    }
+                }
+            );
+        });
+    }
+
+    public registerCall2<T>(topic: string, handler: (parameter: T | undefined, publisher: Subject<T>) => void): Subscription {
         return this._in.pipe(
             filter(msg => msg.rx_state === STATE_SUBSCRIBE),
             filter(msg => msg.topic === topic)
         ).subscribe(msg => {
             const subject = new Subject<T>();
-            subject.subscribe({
-                next: nxt => {
-                    const nxtMsg: RxImpMessage = {
-                        id: msg.id,
-                        topic: msg.topic,
-                        count: 0,
-                        rx_state: STATE_NEXT,
-                        payload: JSON.stringify(nxt),
+            subject
+                .pipe(
+                    takeUntil(this._in.pipe(
+                        filter(msg => msg.rx_state === STATE_DISPOSE),
+                        filter(disposeMsg => disposeMsg.id === msg.id),
+                        tap(n => console.log("Dispose Message Received. Current Value: " + n.payload)),
+                        take(1))
+                    )
+                )
+                .subscribe({
+                    next: nxt => {
+                        const nxtMsg: RxImpMessage = {
+                            id: msg.id,
+                            topic: msg.topic,
+                            count: 0,
+                            rx_state: STATE_NEXT,
+                            payload: JSON.stringify(nxt),
+                        }
+                        this._out.next(nxtMsg);
+                    },
+                    error: err => {
+                        const errMsg: RxImpMessage = {
+                            id: msg.id,
+                            topic: msg.topic,
+                            count: 0,
+                            rx_state: STATE_ERROR,
+                            payload: JSON.stringify(err.message),
+                        }
+                        this._out.next(errMsg);
+                    },
+                    complete: () => {
+                        const cmplMsg: RxImpMessage = {
+                            id: msg.id,
+                            topic: msg.topic,
+                            count: 0,
+                            rx_state: STATE_COMPLETE
+                        }
+                        this._out.next(cmplMsg);
                     }
-                    this._out.next(nxtMsg);
-                },
-                error: err => {
-                    const errMsg: RxImpMessage = {
-                        id: msg.id,
-                        topic: msg.topic,
-                        count: 0,
-                        rx_state: STATE_ERROR,
-                        payload: JSON.stringify(err.message),
-                    }
-                    this._out.next(errMsg);
-                },
-                complete: () => {
-                    const cmplMsg: RxImpMessage = {
-                        id: msg.id,
-                        topic: msg.topic,
-                        count: 0,
-                        rx_state: STATE_COMPLETE
-                    }
-                    this._out.next(cmplMsg);
-                }
-            });
+                });
             if (msg.payload) {
                 handler(JSON.parse(msg.payload), subject);
             } else {

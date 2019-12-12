@@ -1,8 +1,9 @@
 import { RxImp } from './rx-imp';
-import { Subject, BehaviorSubject, ReplaySubject } from 'rxjs';
+import { Subject, BehaviorSubject, ReplaySubject, interval, of, throwError } from 'rxjs';
 import { rxData, RxImpMessage, STATE_SUBSCRIBE } from './rx-imp.model';
 import { TestScheduler } from 'rxjs/testing';
 import { promises } from 'dns';
+import { finalize, take } from 'rxjs/operators';
 
 let inSubject: Subject<rxData>;
 let outSubject: Subject<rxData>;
@@ -41,10 +42,9 @@ describe("rxImp", () => {
         testScheduler.run(helpers => {
             const { expectObservable } = helpers;
             const tester = new ReplaySubject<boolean>();
-            rxImp.registerCall<string>(TEST_TOPIC, (data, publisher) => {
+            rxImp.registerCall<string>(TEST_TOPIC, (data) => {
                 tester.next(true);
-                publisher.next(data);
-                publisher.complete();
+                return of(data);
             });
 
             const testMsg: RxImpMessage = {
@@ -71,9 +71,8 @@ describe("rxImp", () => {
                 error: e => inSubject.error(e),
                 complete: () => inSubject.complete(),
             });
-            rxImp.registerCall(TEST_TOPIC, (args, subj) => {
-                subj.next(args);
-                subj.complete();
+            rxImp.registerCall(TEST_TOPIC, (args) => {
+                return of(args);
             });
             expectObservable(rxImp.observableCall<string>(TEST_TOPIC, "Hello World")).toBe('(a|)', { a: "Hello World" });
         });
@@ -90,10 +89,30 @@ describe("rxImp", () => {
                 error: e => inSubject.error(e),
                 complete: () => inSubject.complete(),
             });
-            rxImp.registerCall(TEST_TOPIC, (args, subj) => {
-                subj.error(new Error("This is not what I wanted!"));
+            rxImp.registerCall(TEST_TOPIC, (args) => {
+                return throwError(new Error("This is not what I wanted!"))
             });
             expectObservable(rxImp.observableCall<string>(TEST_TOPIC, "Hello World")).toBe('#', null, new Error(JSON.stringify("This is not what I wanted!")));
+        });
+    });
+
+    it("Detects when other side unsubscribes", () => {
+        testScheduler.run(helpers => {
+            const { expectObservable, cold } = helpers;
+            const answer = cold("a-b-c-d-e-f-g-h-i-j|");
+            outSubject.subscribe({
+                next: n => {
+                    inSubject.next(n);
+                },
+                error: e => inSubject.error(e),
+                complete: () => inSubject.complete(),
+            });
+            const unsubscribeDetector = new Subject();
+            rxImp.registerCall(TEST_TOPIC, (args) => {
+                return answer.pipe(finalize(() => unsubscribeDetector.complete()));
+            });
+            expectObservable(rxImp.observableCall<string>(TEST_TOPIC, "Hello World").pipe(take(5))).toBe('a-b-c-d-(e|)');
+            expectObservable(unsubscribeDetector).toBe("--------|");
         });
     });
 });
