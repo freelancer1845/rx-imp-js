@@ -49,25 +49,6 @@ export class RxImp {
             payload: JSON.stringify(payload),
         };
 
-        // return defer(() => {
-        //     const obs = this._in.pipe(
-        //         filter(recvMsg => recvMsg.id === msg.id),
-        //         map(this._checkError),
-        //         takeWhile(this._checkNotComplete),
-        //         map(recvMsg => {
-        //             if (recvMsg.payload) {
-        //                 return <T>JSON.parse(recvMsg.payload as string)
-        //             }
-        //             else {
-        //                 return {} as T;
-        //             }
-        //         }),
-        //         share(),
-        //     );
-        //     this._out.next(msg);
-        //     return obs;
-        // });
-
         return new Observable<T>(observer => {
             const subscription = this._in.pipe(
                 filter(recvMsg => recvMsg.id === msg.id),
@@ -114,7 +95,6 @@ export class RxImp {
                 takeUntil(this._in.pipe(
                     filter(msg => msg.rx_state === STATE_DISPOSE),
                     filter(disposeMsg => disposeMsg.id === msg.id),
-                    tap(n => console.log("Dispose Message Received. Current Value: " + n.payload)),
                     take(1))
                 )
             ).subscribe(
@@ -151,60 +131,6 @@ export class RxImp {
                 }
             );
         });
-    }
-
-    public registerCall2<T>(topic: string, handler: (parameter: T | undefined, publisher: Subject<T>) => void): Subscription {
-        return this._in.pipe(
-            filter(msg => msg.rx_state === STATE_SUBSCRIBE),
-            filter(msg => msg.topic === topic)
-        ).subscribe(msg => {
-            const subject = new Subject<T>();
-            subject
-                .pipe(
-                    takeUntil(this._in.pipe(
-                        filter(msg => msg.rx_state === STATE_DISPOSE),
-                        filter(disposeMsg => disposeMsg.id === msg.id),
-                        tap(n => console.log("Dispose Message Received. Current Value: " + n.payload)),
-                        take(1))
-                    )
-                )
-                .subscribe({
-                    next: nxt => {
-                        const nxtMsg: RxImpMessage = {
-                            id: msg.id,
-                            topic: msg.topic,
-                            count: 0,
-                            rx_state: STATE_NEXT,
-                            payload: JSON.stringify(nxt),
-                        }
-                        this._out.next(nxtMsg);
-                    },
-                    error: err => {
-                        const errMsg: RxImpMessage = {
-                            id: msg.id,
-                            topic: msg.topic,
-                            count: 0,
-                            rx_state: STATE_ERROR,
-                            payload: JSON.stringify(err.message),
-                        }
-                        this._out.next(errMsg);
-                    },
-                    complete: () => {
-                        const cmplMsg: RxImpMessage = {
-                            id: msg.id,
-                            topic: msg.topic,
-                            count: 0,
-                            rx_state: STATE_COMPLETE
-                        }
-                        this._out.next(cmplMsg);
-                    }
-                });
-            if (msg.payload) {
-                handler(JSON.parse(msg.payload), subject);
-            } else {
-                handler(undefined, subject);
-            }
-        })
     }
 
     private _checkError(msg: RxImpMessage): RxImpMessage {
