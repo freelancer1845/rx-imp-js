@@ -146,7 +146,13 @@ export class RxImp {
     }
 
     private mapIncoming(data: rxData): RxImpMessage {
-        return JSON.parse(String.fromCharCode.apply(null, Array.from(new Uint8Array(data))));
+        if ('TextDecoder' in window) {
+            let utf8Decoder = new TextDecoder();
+            return JSON.parse(utf8Decoder.decode(data));
+        } else {
+            return JSON.parse(String.fromCharCode.apply(null, Array.from(new Uint8Array(data))));
+        }
+   
     }
 
 
