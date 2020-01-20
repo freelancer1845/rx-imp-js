@@ -1,9 +1,9 @@
 import { RxImp } from './rx-imp';
 import { Subject, BehaviorSubject, ReplaySubject, interval, of, throwError } from 'rxjs';
-import { rxData, RxImpMessage, STATE_SUBSCRIBE } from './rx-imp.model';
+import { rxData, RxImpMessage, STATE_SUBSCRIBE, STATE_COMPLETE, STATE_NEXT } from './rx-imp.model';
 import { TestScheduler } from 'rxjs/testing';
 import { promises } from 'dns';
-import { finalize, take } from 'rxjs/operators';
+import { finalize, take, map } from 'rxjs/operators';
 
 let inSubject: Subject<rxData>;
 let outSubject: Subject<rxData>;
@@ -113,6 +113,36 @@ describe("rxImp", () => {
             });
             expectObservable(rxImp.observableCall<string>(TEST_TOPIC, "Hello World").pipe(take(5))).toBe('a-b-c-d-(e|)');
             expectObservable(unsubscribeDetector).toBe("--------|");
+        });
+    });
+
+    it("Sorts elements", () => {
+        testScheduler.run(helpers => {
+            const { expectObservable } = helpers;
+
+            const values = {
+                a: "Hello World",
+            };
+            outSubject.pipe(map(msg => rxImp['mapIncoming'](msg))).subscribe(msg => {
+                const nextMsg: RxImpMessage = {
+                    id: msg.id,
+                    topic: TEST_TOPIC,
+                    count: 0,
+                    rx_state: STATE_NEXT,
+                    payload: JSON.stringify("Hello World")
+                };
+                const cmplMsg: RxImpMessage = {
+                    id: msg.id,
+                    topic: TEST_TOPIC,
+                    count: 1,
+                    rx_state: STATE_COMPLETE,
+                    payload: undefined
+                }
+                inSubject.next(rxImp['mapOutgoing'](cmplMsg));
+                inSubject.next(rxImp['mapOutgoing'](nextMsg));
+            });
+            expectObservable(rxImp.observableCall<string>(TEST_TOPIC, JSON.stringify("Hello World"))).toBe('--------(a|)', values);
+
         });
     });
 });

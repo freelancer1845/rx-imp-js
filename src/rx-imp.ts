@@ -1,6 +1,6 @@
 import { Observable, Subject, ConnectableObservable, defer, Subscription } from 'rxjs';
 import { rxData, RxImpMessage, STATE_NEXT, STATE_SUBSCRIBE, STATE_ERROR, STATE_COMPLETE, STATE_DISPOSE } from './rx-imp.model';
-import { map, publish, filter, takeWhile, publishReplay, tap, shareReplay, share, takeUntil, take } from 'rxjs/operators';
+import { map, publish, filter, takeWhile, publishReplay, tap, shareReplay, share, takeUntil, take, finalize } from 'rxjs/operators';
 import * as uuid from 'uuid';
 
 
@@ -50,10 +50,31 @@ export class RxImp {
         };
 
         return new Observable<T>(observer => {
-            const subscription = this._in.pipe(
+            const publisher = new Subject<RxImpMessage>();
+            let currentCount = 0;
+            let queue: RxImpMessage[] = [];
+
+            const subscription2 = this._in.pipe(
                 filter(recvMsg => recvMsg.id === msg.id),
                 filter(recvMsg => recvMsg.rx_state !== STATE_SUBSCRIBE),
                 map(this._checkError),
+            ).subscribe(msg => {
+                currentCount++;
+                queue.push(msg);
+                queue.sort((a, b) => a.count - b.count);
+                queue = queue.filter(t => {
+                    if (t.count < currentCount) {
+                        publisher.next(t);
+                        return false;
+                    } else {
+                        return true;
+                    }
+                })
+
+            }, error => publisher.error(error));
+
+
+            const subscription = publisher.pipe(
                 takeWhile(this._checkNotComplete),
                 map(recvMsg => {
                     if (recvMsg.payload) {
@@ -63,7 +84,9 @@ export class RxImp {
                         return {} as T;
                     }
                 }),
-                share(),
+                finalize(() => {
+                    subscription2.unsubscribe();
+                })
             ).subscribe(observer);
             this._out.next(msg);
 
@@ -72,7 +95,7 @@ export class RxImp {
                 const unsubscribeMsg: RxImpMessage = {
                     id: msg.id,
                     topic: msg.topic,
-                    count: 0,
+                    count: 1,
                     rx_state: STATE_DISPOSE
                 }
                 this._out.next(unsubscribeMsg);
@@ -81,6 +104,7 @@ export class RxImp {
     }
 
     public registerCall<T>(topic: string, handler: (arg: T) => Observable<T>): Subscription {
+        let currentCount = 0;
         return this._in.pipe(
             filter(msg => msg.rx_state === STATE_SUBSCRIBE),
             filter(msg => msg.topic === topic)
@@ -103,7 +127,7 @@ export class RxImp {
                         const nxtMsg: RxImpMessage = {
                             id: msg.id,
                             topic: msg.topic,
-                            count: 0,
+                            count: currentCount++,
                             rx_state: STATE_NEXT,
                             payload: JSON.stringify(nxt),
                         }
@@ -113,7 +137,7 @@ export class RxImp {
                         const errMsg: RxImpMessage = {
                             id: msg.id,
                             topic: msg.topic,
-                            count: 0,
+                            count: currentCount++,
                             rx_state: STATE_ERROR,
                             payload: JSON.stringify(err.message),
                         }
@@ -123,7 +147,7 @@ export class RxImp {
                         const cmplMsg: RxImpMessage = {
                             id: msg.id,
                             topic: msg.topic,
-                            count: 0,
+                            count: currentCount++,
                             rx_state: STATE_COMPLETE
                         }
                         this._out.next(cmplMsg);
@@ -152,7 +176,7 @@ export class RxImp {
         } else {
             return JSON.parse(String.fromCharCode.apply(null, Array.from(new Uint8Array(data))));
         }
-   
+
     }
 
 
